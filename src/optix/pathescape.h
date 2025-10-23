@@ -23,17 +23,16 @@
 NGP_NAMESPACE_BEGIN
 
 struct PathEscape {
-	struct Params
-	{
-		const Eigen::Vector3f* ray_origins;
-		const Triangle* triangles;
-		float* distances;
-		OptixTraversableHandle handle;
-	};
+    struct Params {
+        const Eigen::Vector3f *ray_origins;
+        const Triangle *triangles;
+        float *distances;
+        OptixTraversableHandle handle;
+    };
 
-	struct RayGenData {};
-	struct MissData {};
-	struct HitGroupData {};
+    struct RayGenData {};
+    struct MissData {};
+    struct HitGroupData {};
 };
 
 NGP_NAMESPACE_END

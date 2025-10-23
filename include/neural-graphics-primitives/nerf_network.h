@@ -71,7 +71,7 @@ public:
 
 		m_variance = 0.3f;
 		m_training_step = 0;
-		m_sdf_bias =(T)(local_density_network_config.value("sdf_bias", -0.1f)); 
+		m_sdf_bias =(T)(local_density_network_config.value("sdf_bias", -0.1f));
 
 		accumulated_transition = std::make_shared<TrainableBuffer<1, 1, T>>(Eigen::Matrix<int, 1, 1>{(int)4});
 		#if rotation_reprensentation
@@ -133,7 +133,7 @@ public:
 		// Make sure our temporary buffers have the correct size for the given batch size
 		uint32_t batch_size = input.n();
 		auto forward = std::make_unique<ForwardContext>();
-		
+
 		forward->density_network_input = tcnn::GPUMatrixDynamic<T>{m_density_network_input_width, batch_size, stream, m_pos_encoding->preferred_output_layout()};
 		forward->density_network_input.memset_async(stream, 0);
 		forward->rgb_network_input = tcnn::GPUMatrixDynamic<T>{m_rgb_network_input_width, batch_size, stream, m_dir_encoding->preferred_output_layout()};
@@ -150,10 +150,10 @@ public:
 
 			forward->delta_network_input =  tcnn::GPUMatrixDynamic<float> {m_delta_network->input_width(), batch_size, stream, input.layout()};
 			tcnn::linear_kernel(fill_positions_view<float,float>, 0, stream, batch_size * m_pos_encoding->input_width(), m_pos_encoding->input_width(),
-						input.view(), forward->delta_network_input.view());	
+						input.view(), forward->delta_network_input.view());
 
 			tcnn::linear_kernel(fill_positions_view<float,float>, 0, stream, batch_size * m_dir_encoding->input_width(), m_dir_encoding->input_width(),
-						get_advance(input.view(), m_dir_offset, 0), get_advance(forward->delta_network_input.view(), m_pos_encoding->input_width(), 0));	
+						get_advance(input.view(), m_dir_offset, 0), get_advance(forward->delta_network_input.view(), m_pos_encoding->input_width(), 0));
 
 			forward->delta_network_ctx = m_delta_network->forward(stream,
 					forward->delta_network_input,
@@ -165,11 +165,11 @@ public:
 						forward->delta_network_output.view(), deformed_xyz.view());
 			tcnn::linear_kernel(fill_positions_view<float,float>, 0, stream, batch_size * m_dir_encoding->input_width(), m_dir_encoding->input_width(),
 						get_advance(forward->delta_network_output.view(), m_pos_encoding->input_width(), 0), deformed_viewdir.view());
-			
+
 		}
 		else {
 			deformed_xyz = input.slice_rows(0, m_pos_encoding->input_width());
-			
+
 			tcnn::linear_kernel(fill_positions_view<float,float>, 0, stream, batch_size * m_dir_encoding->input_width(), m_dir_encoding->input_width(),
 						get_advance(input.view(), m_dir_offset, 0), deformed_viewdir.view());
 
@@ -193,7 +193,7 @@ public:
 			tcnn::linear_kernel(fill_positions_view_with_fixed_offset<T, float>, 0, stream,
 				batch_size*m_pos_encoding->input_width(), m_pos_encoding->input_width(),
 				deformed_xyz.slice_rows(0, m_pos_encoding->input_width()).view(), forward->density_network_input.view());
-		
+
 			tcnn::linear_kernel(fill_positions_view<T, T>, 0, stream,
 				batch_size*m_pos_encoding->padded_output_width(), m_pos_encoding->padded_output_width(),
 				encoded_xyz.view(), get_advance(forward->density_network_input.view(),m_pos_encoding->input_width(), 0));
@@ -266,7 +266,7 @@ public:
 			batch_size*m_pos_encoding->input_width(), m_pos_encoding->input_width(),
 			forward->dSDF_dPos.view(), get_advance(forward->rgb_network_input.view(), m_density_network->padded_output_width() + m_dir_encoding->padded_output_width() + m_pos_encoding->input_width(), 0));
 
-	
+
 		tcnn::GPUMatrixDynamic<T> rgb_network_output = tcnn::GPUMatrixDynamic<T>{output->data(), m_rgb_network->padded_output_width(), batch_size, output->layout()};
 		forward->rgb_network_ctx = m_rgb_network->forward(stream, forward->rgb_network_input, output ? &rgb_network_output : nullptr, use_inference_params, prepare_input_gradients);
 		// end rgb network forward
@@ -288,7 +288,7 @@ public:
 				);
 			#endif
 
-	
+
 
 			tcnn::linear_kernel(extract_dSDF_dPos_view<T, float>, 0, stream,
 				batch_size*3,
@@ -310,7 +310,7 @@ public:
 				get_advance(output->view(), 8, 0)
 			);
 		}
-		
+
 		return forward;
 	}
 
@@ -338,8 +338,8 @@ public:
 		const tcnn::GPUMatrixDynamic<T> rgb_network_output{(T*)output.data(), m_rgb_network->padded_output_width(), batch_size, output.layout()};
 		tcnn::GPUMatrixDynamic<T> dL_drgb_network_input{m_rgb_network_input_width, batch_size, stream, m_dir_encoding->preferred_output_layout()};
 		m_rgb_network->backward(stream, *forward.rgb_network_ctx, forward.rgb_network_input, rgb_network_output, dL_drgb, &dL_drgb_network_input, use_inference_params, param_gradients_mode);
-	
-	
+
+
 		// Backprop through dir encoding if it is trainable or if we need input gradients
 
 		#if viewdir_backward
@@ -406,7 +406,7 @@ public:
 		tcnn::GPUMatrixDynamic<float> dL_dpos_encoding_input{m_pos_encoding->input_width(), batch_size, stream, input.layout()};
 		dL_dpos_encoding_input.memset_async(stream, 0);
 
-		#if GEOMETRY_INIT	
+		#if GEOMETRY_INIT
 			tcnn::GPUMatrixDynamic<T> dL_dposencoding_output{m_pos_encoding->padded_output_width(), batch_size, stream, m_pos_encoding->preferred_output_layout()};
 
 			tcnn::linear_kernel(fill_positions_view<T, T>, 0, stream,
@@ -472,7 +472,7 @@ public:
 					get_advance(dL_drgb_network_input.view(), m_density_network->padded_output_width() + m_dir_encoding->padded_output_width() + m_pos_encoding->input_width(), 0),//
 					dL_dsdf_dinput.view()
 				);
-		
+
 				// d(ek_loss)_d(normal)
 				tcnn::linear_kernel(add_positions_view_ekloss<float, T>, 0, stream,
 					batch_size*m_pos_encoding->input_width(),
@@ -506,11 +506,11 @@ public:
 				#if GEOMETRY_INIT
 					tcnn::GPUMatrixDynamic<T> dL_ddensity_input{ m_density_network_input_width, batch_size, stream, m_pos_encoding->preferred_output_layout()};
 
-					m_density_network->backward(stream, *forward.density_network_ctx, forward.density_network_input, 
-							forward.density_network_output, 
-							dL_dmlp_output, 
+					m_density_network->backward(stream, *forward.density_network_ctx, forward.density_network_input,
+							forward.density_network_output,
+							dL_dmlp_output,
 							&dL_ddensity_input, use_inference_params, tcnn::EGradientMode::Ignore);
-				
+
 
 					tcnn::linear_kernel(fill_positions_view<T, T>, 0, stream,
 							batch_size*m_pos_encoding->padded_output_width(),
@@ -519,11 +519,11 @@ public:
 							dL_denc_output.view()
 						);
 				#else
-					m_density_network->backward(stream, *forward.density_network_ctx, forward.density_network_input, 
-							forward.density_network_output, 
-							dL_dmlp_output, 
+					m_density_network->backward(stream, *forward.density_network_ctx, forward.density_network_input,
+							forward.density_network_output,
+							dL_dmlp_output,
 							&dL_denc_output, use_inference_params, tcnn::EGradientMode::Ignore);
-				
+
 				#endif
 
 				tcnn::GPUMatrixDynamic<float> dL_dsdf_dinput_d_input{m_pos_encoding->input_width(), batch_size, stream};
@@ -532,14 +532,14 @@ public:
 				tcnn::GPUMatrixDynamic<T> pos_encoding_dy{m_pos_encoding->padded_output_width(), batch_size, stream};
 				pos_encoding_dy.memset_async(stream, 0);
 				m_pos_encoding->backward_backward_input(
-					stream, 
+					stream,
 					*forward.pos_encoding_ctx,
 					forward.delta_network_output.slice_rows(0, m_pos_encoding->input_width()),
 					dL_dsdf_dinput, // dL_d(d(mlp_output)_dx)
 					dL_denc_output, // d(mlp_output)_d(encoding)
 					&pos_encoding_dy, // dl_d(dy'_dy)
 					&dL_dsdf_dinput_d_input,
-					use_inference_params, 
+					use_inference_params,
 					tcnn::EGradientMode::Accumulate
 				);
 
@@ -555,31 +555,31 @@ public:
 					tcnn::linear_kernel(fill_positions_view<T, float>, 0, stream,
 						batch_size*m_pos_encoding->input_width(), m_pos_encoding->input_width(),
 						dL_dsdf_dinput.view(), d_density_input.view());
-					
+
 
 					m_density_network->backward_backward_input(
-						stream, 
+						stream,
 						*forward.density_network_ctx,
-						forward.density_network_input, 
+						forward.density_network_input,
 						d_density_input,  // dl_d(dy'_dx)
 						dL_dmlp_output, // d(mlp_output)_d(mlp_output) -> dy'_dy
 						nullptr,
 						nullptr,
-						use_inference_params, 
+						use_inference_params,
 						//  param_gradients_mode
 						tcnn::EGradientMode::Accumulate
 					);
 
 				#else
 					m_density_network->backward_backward_input(
-						stream, 
+						stream,
 						*forward.density_network_ctx,
-						forward.density_network_input, 
+						forward.density_network_input,
 						pos_encoding_dy,
 						dL_dmlp_output,
 						nullptr, // assume dl_ddensity_dx_dx === 0
 						nullptr,
-						use_inference_params, 
+						use_inference_params,
 						tcnn::EGradientMode::Accumulate
 					);
 
@@ -587,7 +587,7 @@ public:
 			}
 		} // backward
 		// chain rule loss contain two loss (1. first order loss: dL_ddelta_network_output 2. second order loss: dl_(dsdf_dx))
-				
+
 		if (m_train_delta && m_use_delta){
 			tcnn::GPUMatrixDynamic<float> dL_ddelta_network_output{m_delta_network->padded_output_width(), batch_size, stream,  dL_dpos_encoding_input.layout()};
 			dL_ddelta_network_output.memset_async(stream, 0);
@@ -607,7 +607,7 @@ public:
 				tcnn::linear_kernel(fill_positions_view<float, float>, 0, stream, batch_size * m_dir_encoding->input_width(), m_dir_encoding->input_width(),
 						dL_ddir_encoding_input.view(),
 						get_advance(dL_ddelta_network_output.view(), m_pos_encoding->input_width(), 0));
-			#endif 
+			#endif
 
 			#if GEOMETRY_INIT
 				// add dl_dxyz in density_network_input [xyz] of [xyz + pos_encoding]
@@ -646,7 +646,7 @@ public:
 		}
 
 		uint32_t batch_size = output.n();
-		
+
 		tcnn::GPUMatrixDynamic<float> deformed_xyz;
 		if (m_use_delta){
 			deformed_xyz = tcnn::GPUMatrixDynamic<float>{ m_delta_network->padded_output_width(), batch_size, stream, input.layout()};
@@ -716,7 +716,7 @@ public:
 		uint32_t batch_size = output.n();
 
 		sdf(stream,input,output,use_inference_params);
-	
+
 		tcnn::linear_kernel(sdf_to_density_variance_buffer<T>, 0, stream,
 			batch_size,
 			m_variance_network->params(),
@@ -772,7 +772,7 @@ public:
 	}
 
 	std::vector<float> load_sdf_mlp_weight(uint32_t n_elements){
-		
+
 		std::vector<float> data(n_elements);
 		std::FILE* fp;
 		if (m_density_network_input_width == 32){
@@ -895,7 +895,7 @@ public:
 			CUDA_CHECK_THROW(cudaMemcpy(params_full_precision + offset, sdf_mlp_weight.data(), m_density_network->n_params() * sizeof(float), cudaMemcpyHostToDevice));
 		#endif
 
-		offset += m_density_network->n_params();		
+		offset += m_density_network->n_params();
 	}
 
 
@@ -935,7 +935,7 @@ public:
 	}
 
 	uint32_t output_width() const override {
-		return 7; 
+		return 7;
 	}
 
 	uint32_t n_extra_dims() const {
@@ -996,14 +996,14 @@ public:
 	const std::shared_ptr<tcnn::Encoding<T>>& dir_encoding() const {
 		return m_dir_encoding;
 	}
-	
+
 	const std::shared_ptr<DeltaNetwork<T>>& delta_network() const {
 		return m_delta_network;
 	}
 
 	void reset_delta_network() {
 		m_delta_network = std::make_shared<DeltaNetwork<T>>();
-		
+
 		tcnn::GPUMemory<char> params_buffer;
 		uint32_t n_params = 8;
 
@@ -1045,7 +1045,7 @@ public:
 		float scale = 1.0f;
 		tcnn::pcg32 rnd{1337};
 		printf("accumulated transition params num: %lu\n",accumulated_transition->n_params());
-		
+
 		accumulated_transition->initialize_params(
 			rnd,
 			params_full_precision + offset,
@@ -1085,7 +1085,7 @@ public:
 
 
 		// initialize_params is only expected to initialize m_params_full_precision. Cast and copy these over!
-		parallel_for_gpu(n_params, [params_fp=params_full_precision, params=params] __device__ (size_t i) {
+		tcnn::parallel_for_gpu(n_params, [params_fp=params_full_precision, params=params] __device__ (size_t i) {
 			params[i] = (T)params_fp[i];
 		});
 		CUDA_CHECK_THROW(cudaDeviceSynchronize());
@@ -1118,7 +1118,7 @@ public:
 	}
 
 	void set_anneal_end(const int& anneal_end){
-		m_anneal_end = anneal_end; 
+		m_anneal_end = anneal_end;
 	}
 
 	tcnn::json hyperparams() const override {
@@ -1165,7 +1165,7 @@ public:
 		#endif
 
 	}
-	
+
 	void save_global_movement(cudaStream_t stream, tcnn::json & network_config) {
 		// when save_global_movement, we have not accumulated the global movement, so we need to accumulate it first
 
@@ -1191,7 +1191,7 @@ public:
 
 		network_config["snapshot"]["rotation"] = tcnn::gpu_memory_to_json_binary(accumulated_rotation->params(), sizeof(T) * accumulated_rotation->n_params());
 		network_config["snapshot"]["transition"] = tcnn::gpu_memory_to_json_binary(accumulated_transition->params(), sizeof(T) * accumulated_transition->n_params());
-	
+
 	}
 
 	void load_global_movement(const tcnn::json network_config) {
@@ -1200,10 +1200,10 @@ public:
 		tcnn::GPUMemory<T> params_hp = network_config["snapshot"]["rotation"];
 
 		size_t n_params = params_hp.size();
-		
+
 		printf("rotation n_params: %lu\n", n_params);
 
-		parallel_for_gpu(n_params, [params=accumulated_rotation->params(), params_hp=params_hp.data()] __device__ (size_t i) {
+		tcnn::parallel_for_gpu(n_params, [params=accumulated_rotation->params(), params_hp=params_hp.data()] __device__ (size_t i) {
 			params[i] = (T)params_hp[i];
 		});
 
@@ -1213,7 +1213,7 @@ public:
 
 		printf("transition n_params: %lu\n", n_params);
 
-		parallel_for_gpu(n_params, [params=accumulated_transition->params(), params_hp=params_hp.data()] __device__ (size_t i) {
+		tcnn::parallel_for_gpu(n_params, [params=accumulated_transition->params(), params_hp=params_hp.data()] __device__ (size_t i) {
 			params[i] = (T)params_hp[i];
 		});
 
@@ -1233,7 +1233,7 @@ public:
 	void save_local_movement(cudaStream_t stream, tcnn::json & network_config) {
 		network_config["snapshot"]["local_rotation"] = tcnn::gpu_memory_to_json_binary(m_delta_network->rotation()->params(), sizeof(T) * m_delta_network->rotation()->n_params());
 		network_config["snapshot"]["local_transition"] = tcnn::gpu_memory_to_json_binary(m_delta_network->transition()->params(), sizeof(T) * m_delta_network->transition()->n_params());
-	
+
 	}
 
 	void load_local_movement(const tcnn::json network_config) {
@@ -1242,10 +1242,10 @@ public:
 		tcnn::GPUMemory<T> params_hp = network_config["snapshot"]["local_rotation"];
 
 		size_t n_params = params_hp.size();
-		
+
 		printf("rotation n_params: %lu\n", n_params);
 
-		parallel_for_gpu(n_params, [params=m_delta_network->rotation()->params(), params_hp=params_hp.data()] __device__ (size_t i) {
+		tcnn::parallel_for_gpu(n_params, [params=m_delta_network->rotation()->params(), params_hp=params_hp.data()] __device__ (size_t i) {
 			params[i] = (T)params_hp[i];
 		});
 
@@ -1255,7 +1255,7 @@ public:
 
 		printf("transition n_params: %lu\n", n_params);
 
-		parallel_for_gpu(n_params, [params=m_delta_network->transition()->params(), params_hp=params_hp.data()] __device__ (size_t i) {
+		tcnn::parallel_for_gpu(n_params, [params=m_delta_network->transition()->params(), params_hp=params_hp.data()] __device__ (size_t i) {
 			params[i] = (T)params_hp[i];
 		});
 	}

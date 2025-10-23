@@ -456,7 +456,7 @@ public:
 
 	uint32_t first_frame_max_training_step = 2000u;
 	uint32_t next_frame_max_training_step = 1000u;
-	
+
 	// global movement config
 	bool m_predict_global_movement = false;
 	uint32_t m_predict_global_movement_training_step = 300u;
@@ -467,7 +467,7 @@ public:
 	// finetune global movement during canonical optimiziation
 	bool m_finetune_global_movement = true;
 
-	// cos anneal 
+	// cos anneal
 	uint32_t m_anneal_end = 0;
 
 	// loss weight

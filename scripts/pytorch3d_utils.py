@@ -1,16 +1,17 @@
-'''
+"""
 @file   pytorch3d_utils.py
 @author Yiming Wang <w752531540@gmail.com>
-'''
+"""
 
+import math
+import sys
+
+import cv2
+import numpy as np
 import pytorch3d
 import torch
 import trimesh
-import sys
-import cv2
-import math
 
-import numpy as np
 
 def make_rotate(rx, ry, rz):
 
@@ -46,15 +47,17 @@ def make_rotate(rx, ry, rz):
     R = np.matmul(np.matmul(Rz, Ry), Rx)
     return R
 
+
 def normalize_v3(arr):
-    ''' Normalize a numpy array of 3 component vectors shape=(n,3) '''
-    lens = np.sqrt(arr[:, 0]**2 + arr[:, 1]**2 + arr[:, 2]**2)
+    """Normalize a numpy array of 3 component vectors shape=(n,3)"""
+    lens = np.sqrt(arr[:, 0] ** 2 + arr[:, 1] ** 2 + arr[:, 2] ** 2)
     eps = 0.00000001
     lens[lens < eps] = eps
     arr[:, 0] /= lens
     arr[:, 1] /= lens
     arr[:, 2] /= lens
     return arr
+
 
 def compute_normal(vertices, faces):
     # Create a zeroed array with the same type and shape as our vertices i.e., per vertex normal
@@ -78,7 +81,6 @@ def compute_normal(vertices, faces):
     return norm
 
 
-
 # -*- coding: utf-8 -*-
 
 # Max-Planck-Gesellschaft zur Förderung der Wissenschaften e.V. (MPG) is
@@ -95,14 +97,39 @@ def compute_normal(vertices, faces):
 #
 # Contact: ps-license@tuebingen.mpg.de
 
-from this import d
+import math
+import os
+import sys
+
+from typing import NewType
+
+import cv2
+import numpy as np
+import torch
+import trimesh
+
+from PIL import Image
+from pytorch3d.io import load_obj
 from pytorch3d.renderer import (
-    BlendParams, blending, look_at_view_transform, FoVOrthographicCameras, PerspectiveCameras,
-    PointLights, RasterizationSettings, PointsRasterizationSettings,
-    PointsRenderer, AlphaCompositor, PointsRasterizer, MeshRenderer,
-    MeshRasterizer, SoftPhongShader, SoftSilhouetteShader, TexturesVertex)
-from pytorch3d.renderer.mesh import TexturesVertex
-from pytorch3d.structures import Meshes, Pointclouds
+    AlphaCompositor,
+    BlendParams,
+    FoVOrthographicCameras,
+    MeshRasterizer,
+    MeshRenderer,
+    PerspectiveCameras,
+    PointLights,
+    PointsRasterizationSettings,
+    PointsRasterizer,
+    PointsRenderer,
+    RasterizationSettings,
+    SoftPhongShader,
+    SoftSilhouetteShader,
+    TexturesVertex,
+    blending,
+    look_at_view_transform,
+)
+from pytorch3d.renderer.materials import Materials
+from pytorch3d.renderer.mesh import TexturesVertex, rasterize_meshes
 from pytorch3d.renderer.mesh.renderer import MeshRendererWithFragments
 from pytorch3d.renderer.mesh.shader import (
     BlendParams,
@@ -116,54 +143,41 @@ from pytorch3d.renderer.mesh.shader import (
     sigmoid_alpha_blend,
     softmax_rgb_blend,
 )
+from pytorch3d.structures import Meshes, Pointclouds
+from termcolor import colored
+from this import d
+from torch import nn
 
-from pytorch3d.renderer.materials import Materials
+
 # from lib.dataset.mesh_util import SMPLX, get_visibility
 
-import torch
-import numpy as np
-from PIL import Image
-from pytorch3d.io import load_obj
-import os
-import sys
-import cv2
-import math
-import trimesh
-import math
-from typing import NewType
-from pytorch3d.structures import Meshes
-from pytorch3d.renderer.mesh import rasterize_meshes
-from termcolor import colored
-from torch import nn
 
 # sys.path.append(os.path.join(os.path.dirname(__file__), "../../"))
 
-Tensor = NewType('Tensor', torch.Tensor)
+Tensor = NewType("Tensor", torch.Tensor)
 
 
-def solid_angles(points: Tensor,
-                 triangles: Tensor,
-                 thresh: float = 1e-8) -> Tensor:
-    ''' Compute solid angle between the input points and triangles
-        Follows the method described in:
-        The Solid Angle of a Plane Triangle
-        A. VAN OOSTEROM AND J. STRACKEE
-        IEEE TRANSACTIONS ON BIOMEDICAL ENGINEERING,
-        VOL. BME-30, NO. 2, FEBRUARY 1983
-        Parameters
-        -----------
-            points: BxQx3
-                Tensor of input query points
-            triangles: BxFx3x3
-                Target triangles
-            thresh: float
-                float threshold
-        Returns
-        -------
-            solid_angles: BxQxF
-                A tensor containing the solid angle between all query points
-                and input triangles
-    '''
+def solid_angles(points: Tensor, triangles: Tensor, thresh: float = 1e-8) -> Tensor:
+    """Compute solid angle between the input points and triangles
+    Follows the method described in:
+    The Solid Angle of a Plane Triangle
+    A. VAN OOSTEROM AND J. STRACKEE
+    IEEE TRANSACTIONS ON BIOMEDICAL ENGINEERING,
+    VOL. BME-30, NO. 2, FEBRUARY 1983
+    Parameters
+    -----------
+        points: BxQx3
+            Tensor of input query points
+        triangles: BxFx3x3
+            Target triangles
+        thresh: float
+            float threshold
+    Returns
+    -------
+        solid_angles: BxQxF
+            A tensor containing the solid angle between all query points
+            and input triangles
+    """
     # Center the triangles on the query points. Size should be BxQxFx3x3
     centered_tris = triangles[:, None] - points[:, :, None, None]
 
@@ -171,9 +185,7 @@ def solid_angles(points: Tensor,
     norms = torch.norm(centered_tris, dim=-1)
 
     # Should be BxQxFx3
-    cross_prod = torch.cross(centered_tris[:, :, :, 1],
-                             centered_tris[:, :, :, 2],
-                             dim=-1)
+    cross_prod = torch.cross(centered_tris[:, :, :, 1], centered_tris[:, :, :, 2], dim=-1)
     # Should be BxQxF
     numerator = (centered_tris[:, :, :, 0] * cross_prod).sum(dim=-1)
     del cross_prod
@@ -183,8 +195,9 @@ def solid_angles(points: Tensor,
     dot02 = (centered_tris[:, :, :, 0] * centered_tris[:, :, :, 2]).sum(dim=-1)
     del centered_tris
 
-    denominator = (norms.prod(dim=-1) + dot01 * norms[:, :, :, 2] +
-                   dot02 * norms[:, :, :, 1] + dot12 * norms[:, :, :, 0])
+    denominator = (
+        norms.prod(dim=-1) + dot01 * norms[:, :, :, 2] + dot02 * norms[:, :, :, 1] + dot12 * norms[:, :, :, 0]
+    )
     del dot01, dot12, dot02, norms
 
     # Should be BxQ
@@ -196,37 +209,34 @@ def solid_angles(points: Tensor,
     return 2 * solid_angle
 
 
-def winding_numbers(points: Tensor,
-                    triangles: Tensor,
-                    thresh: float = 1e-8) -> Tensor:
-    ''' Uses winding_numbers to compute inside/outside
-        Robust inside-outside segmentation using generalized winding numbers
-        Alec Jacobson,
-        Ladislav Kavan,
-        Olga Sorkine-Hornung
-        Fast Winding Numbers for Soups and Clouds SIGGRAPH 2018
-        Gavin Barill
-        NEIL G. Dickson
-        Ryan Schmidt
-        David I.W. Levin
-        and Alec Jacobson
-        Parameters
-        -----------
-            points: BxQx3
-                Tensor of input query points
-            triangles: BxFx3x3
-                Target triangles
-            thresh: float
-                float threshold
-        Returns
-        -------
-            winding_numbers: BxQ
-                A tensor containing the Generalized winding numbers
-    '''
+def winding_numbers(points: Tensor, triangles: Tensor, thresh: float = 1e-8) -> Tensor:
+    """Uses winding_numbers to compute inside/outside
+    Robust inside-outside segmentation using generalized winding numbers
+    Alec Jacobson,
+    Ladislav Kavan,
+    Olga Sorkine-Hornung
+    Fast Winding Numbers for Soups and Clouds SIGGRAPH 2018
+    Gavin Barill
+    NEIL G. Dickson
+    Ryan Schmidt
+    David I.W. Levin
+    and Alec Jacobson
+    Parameters
+    -----------
+        points: BxQx3
+            Tensor of input query points
+        triangles: BxFx3x3
+            Target triangles
+        thresh: float
+            float threshold
+    Returns
+    -------
+        winding_numbers: BxQ
+            A tensor containing the Generalized winding numbers
+    """
     # The generalized winding number is the sum of solid angles of the point
     # with respect to all triangles.
-    return 1 / (4 * math.pi) * solid_angles(points, triangles,
-                                            thresh=thresh).sum(dim=-1)
+    return 1 / (4 * math.pi) * solid_angles(points, triangles, thresh=thresh).sum(dim=-1)
 
 
 def batch_contains(verts, faces, points):
@@ -240,8 +250,7 @@ def batch_contains(verts, faces, points):
     contains = torch.zeros(B, N)
 
     for i in range(B):
-        contains[i] = torch.as_tensor(
-            trimesh.Trimesh(verts[i], faces[i]).contains(points[i]))
+        contains[i] = torch.as_tensor(trimesh.Trimesh(verts[i], faces[i]).contains(points[i]))
 
     return 2.0 * (contains - 0.5)
 
@@ -262,7 +271,7 @@ def dict2obj(d):
 
 
 def face_vertices(vertices, faces):
-    """ 
+    """
     :param vertices: [batch size, number of vertices, 3]
     :param faces: [batch size, number of faces, 3]
     :return: [batch size, number of faces, 3, 3]
@@ -271,32 +280,32 @@ def face_vertices(vertices, faces):
     bs, nv = vertices.shape[:2]
     bs, nf = faces.shape[:2]
     device = vertices.device
-    faces = faces + (torch.arange(bs, dtype=torch.int32).to(device) *
-                     nv)[:, None, None]
+    faces = faces + (torch.arange(bs, dtype=torch.int32).to(device) * nv)[:, None, None]
     vertices = vertices.reshape((bs * nv, vertices.shape[-1]))
-    
+
     return vertices[faces.long()]
 
 
 class Pytorch3dRasterizer(nn.Module):
-    """  Borrowed from https://github.com/facebookresearch/pytorch3d
+    """Borrowed from https://github.com/facebookresearch/pytorch3d
     Notice:
         x,y,z are in image space, normalized
         can only render squared image now
     """
+
     def __init__(self, image_size=224):
         """
         use fixed raster_settings for rendering faces
         """
         super().__init__()
         raster_settings = {
-            'image_size': image_size,
-            'blur_radius': 0.0,
-            'faces_per_pixel': 1,
-            'bin_size': None,
-            'max_faces_per_bin': None,
-            'perspective_correct': True,
-            'cull_backfaces': True,
+            "image_size": image_size,
+            "blur_radius": 0.0,
+            "faces_per_pixel": 1,
+            "bin_size": None,
+            "max_faces_per_bin": None,
+            "perspective_correct": True,
+            "cull_backfaces": True,
         }
         raster_settings = dict2obj(raster_settings)
         self.raster_settings = raster_settings
@@ -304,8 +313,7 @@ class Pytorch3dRasterizer(nn.Module):
     def forward(self, vertices, faces, attributes=None):
         fixed_vertices = vertices.clone()
         fixed_vertices[..., :2] = -fixed_vertices[..., :2]
-        meshes_screen = Meshes(verts=fixed_vertices.float(),
-                               faces=faces.long())
+        meshes_screen = Meshes(verts=fixed_vertices.float(), faces=faces.long())
         raster_settings = self.raster_settings
         pix_to_face, zbuf, bary_coords, dists = rasterize_meshes(
             meshes_screen,
@@ -319,8 +327,7 @@ class Pytorch3dRasterizer(nn.Module):
         vismask = (pix_to_face > -1).float()
         D = attributes.shape[-1]
         attributes = attributes.clone()
-        attributes = attributes.view(attributes.shape[0] * attributes.shape[1],
-                                     3, attributes.shape[-1])
+        attributes = attributes.view(attributes.shape[0] * attributes.shape[1], 3, attributes.shape[-1])
         N, H, W, K, _ = bary_coords.shape
         mask = pix_to_face == -1
         pix_to_face = pix_to_face.clone()
@@ -330,8 +337,7 @@ class Pytorch3dRasterizer(nn.Module):
         pixel_vals = (bary_coords[..., None] * pixel_face_vals).sum(dim=-2)
         pixel_vals[mask] = 0  # Replace masked values in output.
         pixel_vals = pixel_vals[:, :, :, 0].permute(0, 3, 1, 2)
-        pixel_vals = torch.cat(
-            [pixel_vals, vismask[:, :, :, 0][:, None, :, :]], dim=1)
+        pixel_vals = torch.cat([pixel_vals, vismask[:, :, :, 0][:, None, :, :]], dim=1)
         return pixel_vals
 
 
@@ -339,8 +345,7 @@ class cleanShader(torch.nn.Module):
     def __init__(self, device="cpu", cameras=None, blend_params=None):
         super().__init__()
         self.cameras = cameras
-        self.blend_params = blend_params if blend_params is not None else BlendParams(
-        )
+        self.blend_params = blend_params if blend_params is not None else BlendParams()
 
     def forward(self, fragments, meshes, **kwargs):
         cameras = kwargs.get("cameras", self.cameras)
@@ -353,16 +358,13 @@ class cleanShader(torch.nn.Module):
         # get renderer output
         blend_params = kwargs.get("blend_params", self.blend_params)
         texels = meshes.sample_textures(fragments)
-        images = blending.softmax_rgb_blend(texels,
-                                            fragments,
-                                            blend_params,
-                                            znear=-256,
-                                            zfar=256)
+        images = blending.softmax_rgb_blend(texels, fragments, blend_params, znear=-256, zfar=256)
 
         return images
 
+
 def parse_extrinsics(extrinsics, world2camera=True):
-    """ this function is only for numpy for now"""
+    """this function is only for numpy for now"""
     if extrinsics.shape[0] == 3 and extrinsics.shape[1] == 4:
         extrinsics = np.vstack([extrinsics, np.array([[0, 0, 0, 1.0]])])
     if extrinsics.shape[0] == 1 and extrinsics.shape[1] == 16:
@@ -370,6 +372,7 @@ def parse_extrinsics(extrinsics, world2camera=True):
     if world2camera:
         extrinsics = np.linalg.inv(extrinsics).astype(np.float32)
     return extrinsics
+
 
 def load_intrinsics(filepath, resized_width=None, invert_y=False):
     try:
@@ -386,8 +389,8 @@ def load_intrinsics(filepath, resized_width=None, invert_y=False):
         pass
 
     # Get camera intrinsics
-    with open(filepath, 'r') as file:
-        
+    with open(filepath, "r") as file:
+
         f, cx, cy, _ = map(float, file.readline().split())
     fx = f
     if invert_y:
@@ -396,11 +399,9 @@ def load_intrinsics(filepath, resized_width=None, invert_y=False):
         fy = f
 
     # Build the intrinsic matrices
-    full_intrinsic = np.array([[fx, 0., cx, 0.],
-                               [0., fy, cy, 0],
-                               [0., 0, 1, 0],
-                               [0, 0, 0, 1]])
+    full_intrinsic = np.array([[fx, 0.0, cx, 0.0], [0.0, fy, cy, 0], [0.0, 0, 1, 0], [0, 0, 0, 1]])
     return full_intrinsic
+
 
 def load_matrix(path):
     lines = [[float(w) for w in line.strip().split()] for line in open(path)]
@@ -410,7 +411,8 @@ def load_matrix(path):
         lines = lines[:-1]
     return np.array(lines).astype(np.float32)
 
-class Render():
+
+class Render:
     def __init__(self, size=512, device=torch.device("cuda:0")):
         self.device = device
         self.mesh_y_center = 100.0
@@ -434,177 +436,165 @@ class Render():
         # self.smplx = SMPLX()
 
         self.uv_rasterizer = Pytorch3dRasterizer(self.size)
-        
 
     def get_camera(self, cam_id):
-        R, T = look_at_view_transform(eye=[self.cam_pos[cam_id]],
-                                      at=((0, self.mesh_y_center, 0), ),
-                                      up=((0, 1, 0), ),
-                                      device = self.device
-                                      )
+        R, T = look_at_view_transform(
+            eye=[self.cam_pos[cam_id]], at=((0, self.mesh_y_center, 0),), up=((0, 1, 0),), device=self.device
+        )
 
-        camera = FoVOrthographicCameras(device=self.device,
-                                        R=R,
-                                        T=T,
-                                        znear=100.0,
-                                        zfar=-100.0,
-                                        max_y=100.0,
-                                        min_y=-100.0,
-                                        max_x=100.0,
-                                        min_x=-100.0,
-                                        scale_xyz=(self.scale * np.ones(3), ))
+        camera = FoVOrthographicCameras(
+            device=self.device,
+            R=R,
+            T=T,
+            znear=100.0,
+            zfar=-100.0,
+            max_y=100.0,
+            min_y=-100.0,
+            max_x=100.0,
+            min_x=-100.0,
+            scale_xyz=(self.scale * np.ones(3),),
+        )
 
         return camera
-    
+
     def get_perspective_camera(self, camera):
-        R = camera['R'].permute(0,2,1)
+        R = camera["R"].permute(0, 2, 1)
         # R[0, 0, 0] *= -1.0
-        T = camera['T']
-        image_size= self.size
+        T = camera["T"]
+        image_size = self.size
         half_size = (image_size - 1.0) / 2
-        focal = camera['focal']
-        focal_length = focal/half_size
-        principle = camera['principle']
+        focal = camera["focal"]
+        focal_length = focal / half_size
+        principle = camera["principle"]
         principal_point = []
         for i in range(principle.shape[0]):
-            principal_point.append([(half_size - principle[i,0]) / half_size, \
-                    (-principle[i,1] + half_size) / half_size])
-        principal_point = torch.tensor(principal_point, dtype=torch.float32).reshape(principle.shape[0], 2).to(self.device)
+            principal_point.append(
+                [(half_size - principle[i, 0]) / half_size, (-principle[i, 1] + half_size) / half_size]
+            )
+        principal_point = (
+            torch.tensor(principal_point, dtype=torch.float32).reshape(principle.shape[0], 2).to(self.device)
+        )
         # principal_point = torch.tensor([(principle[0,0]) / half_size, \
-                # (principle[0,1]) / half_size], dtype=torch.float32).reshape(1, 2).to(self.device)
-        camera = PerspectiveCameras(device=self.device,
-                                        R=R,
-                                        T=T,
-                                        focal_length = -focal_length,
-                                        principal_point = principal_point,
-                                        image_size=image_size)
+        # (principle[0,1]) / half_size], dtype=torch.float32).reshape(1, 2).to(self.device)
+        camera = PerspectiveCameras(
+            device=self.device,
+            R=R,
+            T=T,
+            focal_length=-focal_length,
+            principal_point=principal_point,
+            image_size=image_size,
+        )
         return camera
 
-    def init_renderer(self, camera, type='clean_mesh', bg='gray'):
+    def init_renderer(self, camera, type="clean_mesh", bg="gray"):
 
-        if 'mesh' in type:
-            
+        if "mesh" in type:
+
             # rasterizer
             self.raster_settings_mesh = RasterizationSettings(
                 image_size=self.size,
                 blur_radius=np.log(1.0 / 1e-4) * 1e-7,
                 faces_per_pixel=30,
-                perspective_correct=True
+                perspective_correct=True,
             )
             # self.raster_settings_mesh  = RasterizationSettings(
             #     image_size=self.size,  #设置输出图像的大小
             #     blur_radius=0.0, #由于只是为了可视化目的而渲染图像
             #     faces_per_pixel=1 #所以设置faces_per_pixel=1和blur_radius=0.0
             # )
-            self.meshRas = MeshRasterizer(cameras=camera,
-                                        raster_settings=self.raster_settings_mesh)
-            
-        if bg  == 'black':
+            self.meshRas = MeshRasterizer(cameras=camera, raster_settings=self.raster_settings_mesh)
+
+        if bg == "black":
             blendparam = BlendParams(1e-4, 1e-4, (0.0, 0.0, 0.0))
-        elif bg == 'white':
+        elif bg == "white":
             blendparam = BlendParams(1e-4, 1e-8, (1.0, 1.0, 1.0))
-        elif bg == 'gray':
+        elif bg == "gray":
             blendparam = BlendParams(1e-4, 1e-8, (0.5, 0.5, 0.5))
-            
-        if type == 'ori_mesh':
-            
+
+        if type == "ori_mesh":
+
             # lights = PointLights(device=self.device,
             #                  ambient_color=((0.8, 0.8, 0.8), ),
             #                  diffuse_color=((0.2, 0.2, 0.2), ),
             #                  specular_color=((0.0, 0.0, 0.0), ),
             #                 #  location=[[0.0, 200.0, 0.0]])
             #                  location=[[0.0, 1.0, 5.0]])
-            lights = PointLights(device=self.device,
-                            #  ambient_color=((0.8, 0.8, 0.8), ),
-                            #  diffuse_color=((0.2, 0.2, 0.2), ),
-                            #  specular_color=((0.0, 0.0, 0.0), ),
-                            #  location=[[0.0, 200.0, 0.0]])
-                             location=[[0.0, 0.0, 2.0]])
-            
-            self.renderer = MeshRenderer(rasterizer=self.meshRas,
-                                     shader=SoftPhongShader(
-                                         device=self.device,
-                                         cameras=camera,
-                                         lights=lights,
-                                         blend_params=blendparam))
-
-        if type == 'silhouette':
-            self.raster_settings_silhouette = RasterizationSettings(
-                image_size=self.size,
-                blur_radius=np.log(1. / 1e-4 - 1.) * 5e-5,
-                faces_per_pixel=50,
-                cull_backfaces=True,
-                perspective_correct=False  # This solve the problem of the grad nan error 
+            lights = PointLights(
+                device=self.device,
+                #  ambient_color=((0.8, 0.8, 0.8), ),
+                #  diffuse_color=((0.2, 0.2, 0.2), ),
+                #  specular_color=((0.0, 0.0, 0.0), ),
+                #  location=[[0.0, 200.0, 0.0]])
+                location=[[0.0, 0.0, 2.0]],
             )
 
-            self.silhouetteRas = MeshRasterizer(
-                cameras=camera, raster_settings=self.raster_settings_silhouette
-                )
-            self.renderer = MeshRenderer(rasterizer=self.silhouetteRas,
-                                                shader=SoftSilhouetteShader())
-
-        if type == 'zbuf':
-            self.raster_settings_silhouette = RasterizationSettings(
-                image_size=self.size,
-                blur_radius=np.log(1. / 1e-4 - 1.) * 5e-5,
-                faces_per_pixel=1,
-                bin_size=None,
-                max_faces_per_bin = None,
-                cull_backfaces=True,
-                perspective_correct=True  # This solve the problem of the grad nan error 
-            )
-
-            self.silhouetteRas = MeshRasterizer(
-                cameras=camera, raster_settings=self.raster_settings_silhouette
-                )
-            self.renderer = MeshRendererWithFragments(rasterizer=self.silhouetteRas,
-                                                shader=SoftSilhouetteShader())
-            
-        if type == 'pointcloud':
-            self.raster_settings_pcd = PointsRasterizationSettings(
-                image_size=self.size,
-                radius=0.006,
-                points_per_pixel=10)
-            
-            self.pcdRas = PointsRasterizer(cameras=camera,
-                                        raster_settings=self.raster_settings_pcd)
-            self.renderer = PointsRenderer(
-                rasterizer=self.pcdRas,
-                compositor=AlphaCompositor(background_color=(0, 0, 0)))
-
-
-        if type == 'clean_mesh':
-                
             self.renderer = MeshRenderer(
                 rasterizer=self.meshRas,
-                shader=cleanShader(device=self.device,
-                                cameras=camera,
-                                blend_params=blendparam))
+                shader=SoftPhongShader(device=self.device, cameras=camera, lights=lights, blend_params=blendparam),
+            )
 
-        if type == 'textured_mesh':
+        if type == "silhouette":
+            self.raster_settings_silhouette = RasterizationSettings(
+                image_size=self.size,
+                blur_radius=np.log(1.0 / 1e-4 - 1.0) * 5e-5,
+                faces_per_pixel=50,
+                cull_backfaces=True,
+                perspective_correct=False,  # This solve the problem of the grad nan error
+            )
+
+            self.silhouetteRas = MeshRasterizer(cameras=camera, raster_settings=self.raster_settings_silhouette)
+            self.renderer = MeshRenderer(rasterizer=self.silhouetteRas, shader=SoftSilhouetteShader())
+
+        if type == "zbuf":
+            self.raster_settings_silhouette = RasterizationSettings(
+                image_size=self.size,
+                blur_radius=np.log(1.0 / 1e-4 - 1.0) * 5e-5,
+                faces_per_pixel=1,
+                bin_size=None,
+                max_faces_per_bin=None,
+                cull_backfaces=True,
+                perspective_correct=True,  # This solve the problem of the grad nan error
+            )
+
+            self.silhouetteRas = MeshRasterizer(cameras=camera, raster_settings=self.raster_settings_silhouette)
+            self.renderer = MeshRendererWithFragments(rasterizer=self.silhouetteRas, shader=SoftSilhouetteShader())
+
+        if type == "pointcloud":
+            self.raster_settings_pcd = PointsRasterizationSettings(
+                image_size=self.size, radius=0.006, points_per_pixel=10
+            )
+
+            self.pcdRas = PointsRasterizer(cameras=camera, raster_settings=self.raster_settings_pcd)
+            self.renderer = PointsRenderer(
+                rasterizer=self.pcdRas, compositor=AlphaCompositor(background_color=(0, 0, 0))
+            )
+
+        if type == "clean_mesh":
+
+            self.renderer = MeshRenderer(
+                rasterizer=self.meshRas,
+                shader=cleanShader(device=self.device, cameras=camera, blend_params=blendparam),
+            )
+
+        if type == "textured_mesh":
             # lights = PointLights(device=self.device,
-                            #  ambient_color=((0.0, 0.0, 0.0), ),
-                            #  diffuse_color=((0.0, 0.0, 0.0), ),
-                            #  specular_color=((0.0, 0.0, 0.0), ),
-                            #  location=[[0.0, 200.0, 0.0]]).to(self.device)
+            #  ambient_color=((0.0, 0.0, 0.0), ),
+            #  diffuse_color=((0.0, 0.0, 0.0), ),
+            #  specular_color=((0.0, 0.0, 0.0), ),
+            #  location=[[0.0, 200.0, 0.0]]).to(self.device)
             # lights = PointLights(device=self.device)
 
-        # Place light behind the cow in world space. The front of
-        # the cow is facing the -z direction.
+            # Place light behind the cow in world space. The front of
+            # the cow is facing the -z direction.
             # lights.location = torch.tensor([0.0, 0.0, 2.0], device=self.device)[None]
             # materials = Materials(device=self.device).to(self.device)
             self.raster_settings_mesh = RasterizationSettings(
-                image_size=self.size,
-                blur_radius=0.0,
-                faces_per_pixel=1,
-                perspective_correct=True
+                image_size=self.size, blur_radius=0.0, faces_per_pixel=1, perspective_correct=True
             )
-            
+
             self.renderer = MeshRenderer(
                 rasterizer=MeshRasterizer(cameras=camera, raster_settings=self.raster_settings_mesh),
-                shader = myShader(              
-                    cameras= camera,
-                    blend_params= blendparam)
+                shader=myShader(cameras=camera, blend_params=blendparam),
                 # shader=TexturedSoftPhongShader(
                 #     lights=lights,
                 #     materials = materials,
@@ -613,34 +603,22 @@ class Render():
                 # ),
             )
 
-        if type == 'shaded_mesh':
+        if type == "shaded_mesh":
             raster_settings_silhouette = RasterizationSettings(
-                image_size=(self.size,self.size), 
-                blur_radius=0., 
-                bin_size=int(2 ** max(np.ceil(np.log2(max(self.size,self.size))) - 4, 4)),
+                image_size=(self.size, self.size),
+                blur_radius=0.0,
+                bin_size=int(2 ** max(np.ceil(np.log2(max(self.size, self.size))) - 4, 4)),
                 faces_per_pixel=1,
                 perspective_correct=True,
                 clip_barycentric_coords=False,
-                cull_backfaces=False
-            )	
+                cull_backfaces=False,
+            )
             self.renderer = MeshRendererWithFragments(
-                rasterizer=MeshRasterizer(
-                    cameras=camera, 
-                    raster_settings=raster_settings_silhouette
-                ),
-                shader=SoftSilhouetteShader()
+                rasterizer=MeshRasterizer(cameras=camera, raster_settings=raster_settings_silhouette),
+                shader=SoftSilhouetteShader(),
             )
 
-
-        
-        
-
-    def load_mesh(self,
-                  verts,
-                  faces,
-                  verts_rgb,
-                  verts_dense=None,
-                  load_seg=False):
+    def load_mesh(self, verts, faces, verts_rgb, verts_dense=None, load_seg=False):
         """load mesh into the pytorch3d renderer
 
         Args:
@@ -659,14 +637,12 @@ class Render():
             verts = torch.as_tensor(verts).float().unsqueeze(0).to(self.device)
             faces = torch.as_tensor(faces).int().unsqueeze(0).to(self.device)
             if verts_rgb is not None:
-                verts_rgb = torch.as_tensor(
-                    verts_rgb)[:, :3].float().unsqueeze(0).to(self.device)
+                verts_rgb = torch.as_tensor(verts_rgb)[:, :3].float().unsqueeze(0).to(self.device)
         else:
             verts = verts.float().unsqueeze(0).to(self.device)
             faces = faces.int().unsqueeze(0).to(self.device)
             if verts_rgb is not None:
-                verts_rgb = verts_rgb[:, :3].float().unsqueeze(0).to(
-                    self.device)
+                verts_rgb = verts_rgb[:, :3].float().unsqueeze(0).to(self.device)
 
         # dense correspondence results data format convert
         if verts_dense is not None:
@@ -675,25 +651,26 @@ class Render():
             verts_dense = verts_dense[:, :3].unsqueeze(0).to(self.device)
 
         # camera setting
-        self.mesh_y_center = (
-            0.5 *
-            (verts.max(dim=1)[0][0, 1] + verts.min(dim=1)[0][0, 1])).item()
+        self.mesh_y_center = (0.5 * (verts.max(dim=1)[0][0, 1] + verts.min(dim=1)[0][0, 1])).item()
         self.scale = 90.0 / (self.mesh_y_center + 1e-10)
-        self.cam_pos = [(0, self.mesh_y_center, self.dis),
-                        (self.dis, self.mesh_y_center, 0),
-                        (0, self.mesh_y_center, -self.dis),
-                        (-self.dis, self.mesh_y_center, 0)]
+        self.cam_pos = [
+            (0, self.mesh_y_center, self.dis),
+            (self.dis, self.mesh_y_center, 0),
+            (0, self.mesh_y_center, -self.dis),
+            (-self.dis, self.mesh_y_center, 0),
+        ]
 
         # self.verts is for UV rendering, so it is [smpl_num, 3]
         # verts is for normal rendering, so it is [sample_num, 3]
 
         if verts_rgb is not None:
-            self.type = 'color'
+            self.type = "color"
             textures = TexturesVertex(verts_features=verts_rgb)
             self.verts = verts_rgb.squeeze(0)[self.knn].squeeze(1)
 
-        self.mesh = Meshes(verts=verts.to(self.device), faces=faces.to(self.device),
-                           textures=textures.to(self.device)).to(self.device)
+        self.mesh = Meshes(
+            verts=verts.to(self.device), faces=faces.to(self.device), textures=textures.to(self.device)
+        ).to(self.device)
 
         # _, faces, aux = load_obj(self.smplx.tpose_path, device=self.device)
         # uvcoords = aux.verts_uvs[None, ...]  # (N, V, 2)
@@ -720,12 +697,14 @@ class Render():
         self.scale = 100.0
         self.mesh_y_center = 0.0
 
-        self.cam_pos = [(0, self.mesh_y_center, 100.0),
-                        (100.0, self.mesh_y_center, 0),
-                        (0, self.mesh_y_center, -100.0),
-                        (-100.0, self.mesh_y_center, 0)]
+        self.cam_pos = [
+            (0, self.mesh_y_center, 100.0),
+            (100.0, self.mesh_y_center, 0),
+            (0, self.mesh_y_center, -100.0),
+            (-100.0, self.mesh_y_center, 0),
+        ]
 
-        self.type = 'color'
+        self.type = "color"
 
         if not torch.is_tensor(verts):
             verts = torch.tensor(verts)
@@ -748,13 +727,11 @@ class Render():
             false_ids = torch.topk(torch.abs(deform_verts).sum(dim=1), 30)[1]
             deform_verts_copy[false_ids] = deform_verts_copy.mean(dim=0)
 
-            self.mesh = Meshes(verts, faces).to(
-                self.device).offset_verts(deform_verts_copy)
+            self.mesh = Meshes(verts, faces).to(self.device).offset_verts(deform_verts_copy)
         else:
             self.mesh = Meshes(verts, faces).to(self.device)
 
-        textures = TexturesVertex(
-            verts_features=(self.mesh.verts_normals_padded() + 1.0) * 0.5)
+        textures = TexturesVertex(verts_features=(self.mesh.verts_normals_padded() + 1.0) * 0.5)
         self.mesh.textures = textures
 
     def load_pcd(self, verts, verts_rgb):
@@ -769,34 +746,30 @@ class Render():
         if not torch.is_tensor(verts):
             verts = torch.as_tensor(verts).float().unsqueeze(0).to(self.device)
             if verts_rgb is not None:
-                verts_rgb = torch.as_tensor(
-                    verts_rgb)[:, :3].float().unsqueeze(0).to(self.device)
+                verts_rgb = torch.as_tensor(verts_rgb)[:, :3].float().unsqueeze(0).to(self.device)
         else:
             verts = verts.float().unsqueeze(0).to(self.device)
             if verts_rgb is not None:
-                verts_rgb = verts_rgb[:, :3].float().unsqueeze(0).to(
-                    self.device)
+                verts_rgb = verts_rgb[:, :3].float().unsqueeze(0).to(self.device)
 
         # camera setting
-        self.mesh_y_center = (
-            0.5 *
-            (verts.max(dim=1)[0][0, 1] + verts.min(dim=1)[0][0, 1])).item()
+        self.mesh_y_center = (0.5 * (verts.max(dim=1)[0][0, 1] + verts.min(dim=1)[0][0, 1])).item()
         self.scale = 90.0 / (self.mesh_y_center + 1e-10)
-        self.cam_pos = [(0, self.mesh_y_center, self.dis),
-                        (self.dis, self.mesh_y_center, 0),
-                        (0, self.mesh_y_center, -self.dis),
-                        (-self.dis, self.mesh_y_center, 0)]
+        self.cam_pos = [
+            (0, self.mesh_y_center, self.dis),
+            (self.dis, self.mesh_y_center, 0),
+            (0, self.mesh_y_center, -self.dis),
+            (-self.dis, self.mesh_y_center, 0),
+        ]
 
         pcd = Pointclouds(points=verts, features=verts_rgb).to(self.device)
         return pcd
 
     def get_image(self):
-        images = torch.zeros(
-            (self.size, self.size * len(self.cam_pos), 3)).to(self.device)
+        images = torch.zeros((self.size, self.size * len(self.cam_pos), 3)).to(self.device)
         for cam_id in range(len(self.cam_pos)):
-            self.init_renderer(self.get_camera(cam_id), 'ori_mesh', 'gray')
-            images[:, self.size * cam_id:self.size *
-                   (cam_id + 1), :] = self.renderer(self.mesh)[0, :, :, :3]
+            self.init_renderer(self.get_camera(cam_id), "ori_mesh", "gray")
+            images[:, self.size * cam_id : self.size * (cam_id + 1), :] = self.renderer(self.mesh)[0, :, :, :3]
 
         return images.cpu().numpy()
 
@@ -805,40 +778,36 @@ class Render():
         images = []
         for cam_id in range(len(self.cam_pos)):
             if cam_id in cam_ids:
-                self.init_renderer(self.get_camera(cam_id), 'clean_mesh', 'gray')
+                self.init_renderer(self.get_camera(cam_id), "clean_mesh", "gray")
                 if len(cam_ids) == 4:
-                    rendered_img = (self.renderer(
-                        self.mesh)[0:1, :, :, :3].permute(0, 3, 1, 2) -
-                                    0.5) * 2.0
+                    rendered_img = (self.renderer(self.mesh)[0:1, :, :, :3].permute(0, 3, 1, 2) - 0.5) * 2.0
                 else:
-                    rendered_img = (self.renderer(
-                        self.mesh)[0:1, :, :, :3].permute(0, 3, 1, 2) -
-                                    0.5) * 2.0
+                    rendered_img = (self.renderer(self.mesh)[0:1, :, :, :3].permute(0, 3, 1, 2) - 0.5) * 2.0
                 if cam_id == 2 and len(cam_ids) == 2:
                     rendered_img = torch.flip(rendered_img, dims=[3])
                 images.append(rendered_img)
 
         return images
-        
+
     def get_perspective_image(self, camera):
-    
+
         # self.init_renderer(self.get_perspective_camera(camera), 'clean_mesh', 'gray')
-        self.init_renderer(self.get_perspective_camera(camera), 'clean_mesh', 'white')
+        self.init_renderer(self.get_perspective_camera(camera), "clean_mesh", "white")
         rendered_img = (self.renderer(self.mesh)[0, :, :, :3] - 0.5) * 2.0
-     
+
         return rendered_img
 
     def get_textured_image(self, camera):
-    
+
         # self.init_renderer(self.get_perspective_camera(camera), 'clean_mesh', 'gray')
-        self.init_renderer(self.get_perspective_camera(camera), 'textured_mesh', 'white')
+        self.init_renderer(self.get_perspective_camera(camera), "textured_mesh", "white")
         # rendered_img = (self.renderer(self.mesh)[0, :, :, :3] - 0.5) * 2.0
         rendered_img = self.renderer(self.mesh)[0, :, :, :3]
-     
+
         return rendered_img
 
     # def get_shaded_mesh(self, camera):
-    
+
     #     # self.init_renderer(self.get_perspective_camera(camera), 'clean_mesh', 'gray')
     #     self.init_renderer(self.get_perspective_camera(camera), 'shaded_mesh', 'white')
     #     # rendered_img = (self.renderer(self.mesh)[0, :, :, :3] - 0.5) * 2.0
@@ -847,11 +816,11 @@ class Render():
     #     import pdb
     #     pdb.set_trace()
     #     rendered_img = imgs[0, :, :, :3]
-     
+
     #     return rendered_img
 
-    def get_shaded_mesh(self, camera, lights = None):
-    
+    def get_shaded_mesh(self, camera, lights=None):
+
         # self.init_renderer(self.get_perspective_camera(camera), 'clean_mesh', 'gray')
         # self.init_renderer(self.get_perspective_camera(camera), 'ori_mesh', 'white')
         # self.init_renderer(self.get_perspective_camera(camera), 'ori_mesh', 'gray')
@@ -860,45 +829,41 @@ class Render():
 
         blendparam = BlendParams(1e-4, 1e-4, (0.0, 0.0, 0.0))
         self.raster_settings_mesh = RasterizationSettings(
-            image_size=self.size,
-            blur_radius=np.log(1.0 / 1e-4) * 1e-7,
-            faces_per_pixel=30,
-            perspective_correct=True
+            image_size=self.size, blur_radius=np.log(1.0 / 1e-4) * 1e-7, faces_per_pixel=30, perspective_correct=True
         )
         # self.raster_settings_mesh  = RasterizationSettings(
         #     image_size=self.size,  #设置输出图像的大小
         #     blur_radius=0.0, #由于只是为了可视化目的而渲染图像
         #     faces_per_pixel=1 #所以设置faces_per_pixel=1和blur_radius=0.0
         # )
-        self.meshRas = MeshRasterizer(cameras=camera,
-                                    raster_settings=self.raster_settings_mesh)
+        self.meshRas = MeshRasterizer(cameras=camera, raster_settings=self.raster_settings_mesh)
 
         if lights == None:
-            lights = PointLights(device=self.device,
-                        #  ambient_color=((0.8, 0.8, 0.8), ),
-                        #  diffuse_color=((0.2, 0.2, 0.2), ),
-                        #  specular_color=((0.0, 0.0, 0.0), ),
-                        #  location=[[0.0, 200.0, 0.0]])
-                            location=[[0.0, 0.0, 2.0]])
-                            
-        self.renderer = MeshRenderer(rasterizer=self.meshRas,
-                                    shader=SoftPhongShader(
-                                        device=self.device,
-                                        cameras=camera,
-                                        lights=lights,
-                                        blend_params=blendparam))
-                                        
+            lights = PointLights(
+                device=self.device,
+                #  ambient_color=((0.8, 0.8, 0.8), ),
+                #  diffuse_color=((0.2, 0.2, 0.2), ),
+                #  specular_color=((0.0, 0.0, 0.0), ),
+                #  location=[[0.0, 200.0, 0.0]])
+                location=[[0.0, 0.0, 2.0]],
+            )
+
+        self.renderer = MeshRenderer(
+            rasterizer=self.meshRas,
+            shader=SoftPhongShader(device=self.device, cameras=camera, lights=lights, blend_params=blendparam),
+        )
+
         # self.init_renderer(self.get_perspective_camera(camera), 'ori_mesh', 'black')
         # rendered_img = (self.renderer(self.mesh)[0, :, :, :3] - 0.5) * 2.0
         rendered_img = self.renderer(self.mesh)[0, :, :, :3]
-     
+
         return rendered_img
 
     def get_all_perspective_image(self, camera):
-        
-        self.init_renderer(self.get_perspective_camera(camera), 'clean_mesh', 'gray')
+
+        self.init_renderer(self.get_perspective_camera(camera), "clean_mesh", "gray")
         rendered_img = (self.renderer(self.mesh)[:, :, :, :3] - 0.5) * 2.0
-     
+
         return rendered_img
 
     def get_rendered_video(self, images, save_path):
@@ -906,26 +871,28 @@ class Render():
         self.cam_pos = []
         for angle in range(360):
             self.cam_pos.append(
-                (100.0 * math.cos(np.pi / 180 * angle), self.mesh_y_center,
-                 100.0 * math.sin(np.pi / 180 * angle)))
+                (100.0 * math.cos(np.pi / 180 * angle), self.mesh_y_center, 100.0 * math.sin(np.pi / 180 * angle))
+            )
 
         old_shape = np.array(images[0].shape[:2])
         new_shape = np.around((self.size / old_shape[0]) * old_shape).astype(np.int)
-        
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        video = cv2.VideoWriter(save_path, fourcc, 30, (self.size+new_shape[1]*len(images), self.size))
-        
+
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        video = cv2.VideoWriter(save_path, fourcc, 30, (self.size + new_shape[1] * len(images), self.size))
+
         print(colored(f"exporting video {os.path.basename(save_path)}, please wait for a while...", "blue"))
-            
+
         for cam_id in range(len(self.cam_pos)):
-            self.init_renderer(self.get_camera(cam_id), 'clean_mesh', 'gray')
-            rendered_img = (self.renderer(
-                self.mesh)[0, :, :, :3] * 255.0).detach().cpu().numpy().astype(np.uint8)
-            img_lst = [np.array(Image.fromarray(img).resize(new_shape[::-1])).astype(np.uint8)[:,:,[2,1,0]] for img in images]
+            self.init_renderer(self.get_camera(cam_id), "clean_mesh", "gray")
+            rendered_img = (self.renderer(self.mesh)[0, :, :, :3] * 255.0).detach().cpu().numpy().astype(np.uint8)
+            img_lst = [
+                np.array(Image.fromarray(img).resize(new_shape[::-1])).astype(np.uint8)[:, :, [2, 1, 0]]
+                for img in images
+            ]
             img_lst.append(rendered_img)
-            final_img = np.concatenate(img_lst,axis=1)
+            final_img = np.concatenate(img_lst, axis=1)
             video.write(final_img)
-            
+
         video.release()
 
     def get_silhouette_image(self, cam_ids=[0, 2]):
@@ -933,9 +900,8 @@ class Render():
         images = []
         for cam_id in range(len(self.cam_pos)):
             if cam_id in cam_ids:
-                self.init_renderer(self.get_camera(cam_id), 'silhouette')
-                rendered_img = self.renderer(self.mesh)[0:1, :, :,
-                                                                   3]
+                self.init_renderer(self.get_camera(cam_id), "silhouette")
+                rendered_img = self.renderer(self.mesh)[0:1, :, :, 3]
                 if cam_id == 2 and len(cam_ids) == 2:
                     rendered_img = torch.flip(rendered_img, dims=[2])
                 images.append(rendered_img)
@@ -943,76 +909,64 @@ class Render():
         return images
 
     def get_perspective_silhouette_image(self, camera):
-    
-        self.init_renderer(self.get_perspective_camera(camera), 'silhouette')
+
+        self.init_renderer(self.get_perspective_camera(camera), "silhouette")
         rendered_img = self.renderer(self.mesh)[0, :, :, 3]
-     
+
         return rendered_img
-    
+
     def get_zbuf(self, camera):
-        
-        self.init_renderer(self.get_perspective_camera(camera), 'zbuf')
+
+        self.init_renderer(self.get_perspective_camera(camera), "zbuf")
         images, fragments = self.renderer(self.mesh)
         zbuf = fragments.zbuf
         # cv2.imwrite('debug/pytorch3d_occlusion/silhouette.png',(images[0,:,:,3].detach().cpu().numpy()+1)/2*255.5)
         return zbuf
 
     def get_image_pcd(self, pcd):
-        images = torch.zeros(
-            (self.size, self.size * len(self.cam_pos), 3)).to(self.device)
+        images = torch.zeros((self.size, self.size * len(self.cam_pos), 3)).to(self.device)
         for cam_id in range(len(self.cam_pos)):
-            self.init_renderer(self.get_camera(cam_id), 'pointcloud')
-            images[:, self.size*cam_id:self.size*(cam_id+1), :] = \
-                self.renderer(pcd)[0, :, :, :3]
+            self.init_renderer(self.get_camera(cam_id), "pointcloud")
+            images[:, self.size * cam_id : self.size * (cam_id + 1), :] = self.renderer(pcd)[0, :, :, :3]
 
         return images.cpu().numpy()
 
     def get_texture(self, smpl_color=None):
-        '''
+        """
         warp vertices from world space to uv space
         vertices: [bz, V, 3]
         uv_vertices: [bz, 3, h, w]
-        '''
+        """
 
-        if self.type == 'color':
+        if self.type == "color":
             assert smpl_color is not None, "smpl_color argument should not be empty"
 
         batch_size = self.verts.shape[0]
-        face_vertices = face_vertices(
-            self.verts, self.faces.expand(batch_size, -1, -1))
+        face_vertices = face_vertices(self.verts, self.faces.expand(batch_size, -1, -1))
         uv_vertices = self.uv_rasterizer(
-            self.uvcoords.expand(batch_size, -1, -1),
-            self.uvfaces.expand(batch_size, -1, -1), face_vertices)[:, :3]
+            self.uvcoords.expand(batch_size, -1, -1), self.uvfaces.expand(batch_size, -1, -1), face_vertices
+        )[:, :3]
         uv_vertices = uv_vertices.squeeze(0).permute(1, 2, 0).cpu().numpy()
 
-        if self.type == 'dense':
-            face_vertices = face_vertices(
-                self.smpl_cmap[None, ...],
-                self.faces.expand(batch_size, -1, -1))
-        elif self.type == 'color':
-            face_vertices = face_vertices(
-                smpl_color[:, :, :3].to(self.device),
-                self.faces.expand(batch_size, -1, -1))
+        if self.type == "dense":
+            face_vertices = face_vertices(self.smpl_cmap[None, ...], self.faces.expand(batch_size, -1, -1))
+        elif self.type == "color":
+            face_vertices = face_vertices(smpl_color[:, :, :3].to(self.device), self.faces.expand(batch_size, -1, -1))
         else:
-            face_vertices = face_vertices(
-                self.smpl_seg[None, ...],
-                self.faces.expand(batch_size, -1, -1))
+            face_vertices = face_vertices(self.smpl_seg[None, ...], self.faces.expand(batch_size, -1, -1))
 
         uv_vertices_cmap = self.uv_rasterizer(
-            self.uvcoords.expand(batch_size, -1, -1),
-            self.uvfaces.expand(batch_size, -1, -1), face_vertices)[:, :3]
+            self.uvcoords.expand(batch_size, -1, -1), self.uvfaces.expand(batch_size, -1, -1), face_vertices
+        )[:, :3]
 
-        uv_vertices_cmap = uv_vertices_cmap.squeeze(0).permute(
-            1, 2, 0).cpu().numpy()
+        uv_vertices_cmap = uv_vertices_cmap.squeeze(0).permute(1, 2, 0).cpu().numpy()
 
-        return np.concatenate(
-            (np.flip(uv_vertices, 0), np.flip(uv_vertices_cmap, 0)), axis=1)
+        return np.concatenate((np.flip(uv_vertices, 0), np.flip(uv_vertices_cmap, 0)), axis=1)
+
 
 class myShader(torch.nn.Module):
 
-    def __init__(
-        self, device="cpu", cameras=None, blend_params=None
-    ):
+    def __init__(self, device="cpu", cameras=None, blend_params=None):
         super().__init__()
         self.cameras = cameras
         self.blend_params = blend_params if blend_params is not None else BlendParams()
@@ -1031,14 +985,14 @@ class myShader(torch.nn.Module):
         return images
 
 
-def render_mesh(renderer, vertices, faces, ixt, ext, scale = 1.0, shaded = False, lights = None):
-    # vertices = mesh.vertices.copy() 
+def render_mesh(renderer, vertices, faces, ixt, ext, scale=1.0, shaded=False, lights=None):
+    # vertices = mesh.vertices.copy()
     vertices /= scale
-    R = make_rotate(0,math.radians(90),0) 
-    # R = make_rotate(math.radians(90),0,0) 
-    # R = make_rotate(math.radians(90), math.radians(90), math.radians(90)) 
-    # R = make_rotate(0, 0, math.radians(10)) 
-    # R = make_rotate(0, math.radians(0), 0) 
+    R = make_rotate(0, math.radians(90), 0)
+    # R = make_rotate(math.radians(90),0,0)
+    # R = make_rotate(math.radians(90), math.radians(90), math.radians(90))
+    # R = make_rotate(0, 0, math.radians(10))
+    # R = make_rotate(0, math.radians(0), 0)
     # vertices = np.matmul(vertices, R.T)
     # vertices[:,0] *= -1
     normals = compute_normal(vertices, faces)
@@ -1048,17 +1002,16 @@ def render_mesh(renderer, vertices, faces, ixt, ext, scale = 1.0, shaded = False
     # self.renderer.load_mesh(verts=mesh.vertices/self.opt.scale,faces=faces,verts_rgb=normals*0.5+0.5)
     # renderer.load_mesh(verts=mesh.vertices,faces=faces,verts_rgb=torch.ones_like(torch.tensor(normals))*0.5)
 
-
     camera = {}
-    camera['R'] = ext[:3,:3].unsqueeze(0).float()
-    camera['T'] = ext[:3,3].unsqueeze(0).float()
-    camera['focal'] = torch.tensor([ixt[0,0],ixt[1,1]]).unsqueeze(0).float()
-    camera['principle'] = torch.tensor([ixt[0,2],ixt[1,2]]).unsqueeze(0).float()
+    camera["R"] = ext[:3, :3].unsqueeze(0).float()
+    camera["T"] = ext[:3, 3].unsqueeze(0).float()
+    camera["focal"] = torch.tensor([ixt[0, 0], ixt[1, 1]]).unsqueeze(0).float()
+    camera["principle"] = torch.tensor([ixt[0, 2], ixt[1, 2]]).unsqueeze(0).float()
 
     if shaded:
-        renderer.load_mesh(verts=vertices,faces=faces,verts_rgb=torch.ones(vertices.shape))
-        T_mask_F = renderer.get_shaded_mesh(camera=camera, lights = lights).cpu().numpy()*255
+        renderer.load_mesh(verts=vertices, faces=faces, verts_rgb=torch.ones(vertices.shape))
+        T_mask_F = renderer.get_shaded_mesh(camera=camera, lights=lights).cpu().numpy() * 255
     else:
-        renderer.load_mesh(verts=vertices,faces=faces,verts_rgb=normals*0.5+0.5)
-        T_mask_F = renderer.get_textured_image(camera=camera).cpu().numpy()*255
+        renderer.load_mesh(verts=vertices, faces=faces, verts_rgb=normals * 0.5 + 0.5)
+        T_mask_F = renderer.get_textured_image(camera=camera).cpu().numpy() * 255
     return T_mask_F
