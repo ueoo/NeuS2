@@ -10,9 +10,6 @@
 
 import argparse
 import os
-
-
-os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 import sys
 import time
 
@@ -20,12 +17,18 @@ from shutil import copyfile
 
 import commentjson as json
 import numpy as np
+
+
+from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
+
+
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+
 import pyngp as ngp  # type: ignore
 
 from common import *
 from render_utils import render_img_training_view
-from torch.utils.tensorboard import SummaryWriter
-from tqdm import tqdm
 
 
 def parse_args():

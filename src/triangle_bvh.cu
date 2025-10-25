@@ -23,8 +23,9 @@
 #ifdef NGP_OPTIX
 #include <optix.h>
 #include <optix_function_table_definition.h>
-#include <optix_stack_size.h>
 #include <optix_stubs.h>
+// Ensure host API symbols are declared before utilities that depend on them
+#include <optix_stack_size.h>
 
 // Custom optix toolchain stuff
 #include "optix/pathescape.h"

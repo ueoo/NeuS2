@@ -18,6 +18,7 @@ from shutil import copyfile
 
 import commentjson as json
 import numpy as np
+
 import pyngp as ngp  # type: ignore
 import torch
 import trimesh

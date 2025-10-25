@@ -21,4 +21,7 @@
 	url = https://github.com/NVIDIA/DLSS
 [submodule "dependencies/neus2_tcnn"]
 	path = dependencies/neus2_tcnn
-	url = https://github.com/19reborn/NeuS2_TCNN.git
+	url = https://github.com/ueoo/NeuS2_TCNN.git
+[submodule "dependencies/tiny-cuda-nn"]
+	path = dependencies/tiny-cuda-nn
+	url = https://github.com/ueoo/tiny-cuda-nn.git

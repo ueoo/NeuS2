@@ -71,7 +71,7 @@ int main(int argc, char **argv) {
     ValueFlag<string> scene_flag{
         parser,
         "SCENE",
-        "The scene to load. Can be NeRF dataset, a *.obj mesh for training a SDF, an image, or a *.nvdb volume.",
+        "The scene to load. Can be NeRF dataset, a *.obj/*.stl mesh for training a SDF, an image, or a *.nvdb volume.",
         {'s', "scene"},
     };
 
@@ -79,7 +79,7 @@ int main(int argc, char **argv) {
         parser,
         "SNAPSHOT",
         "Optional snapshot to load upon startup.",
-        {"snapshot"},
+        {"snapshot", "load_snapshot"},
     };
 
     ValueFlag<uint32_t> width_flag{
@@ -99,7 +99,7 @@ int main(int argc, char **argv) {
     Flag version_flag{
         parser,
         "VERSION",
-        "Display the version of neural graphics primitives.",
+        "Display the version of instant neural graphics primitives.",
         {'v', "version"},
     };
 
@@ -121,7 +121,7 @@ int main(int argc, char **argv) {
     }
 
     if (version_flag) {
-        tlog::none() << "neural graphics primitives version " NGP_VERSION;
+		tlog::none() << "Instant Neural Graphics Primitives v" NGP_VERSION;
         return 0;
     }
 
@@ -204,7 +204,8 @@ int main(int argc, char **argv) {
 
             testbed.load_snapshot(snapshot_path.str());
             testbed.m_train = false;
-            printf("*******Loaded snapshot succeed!\n");
+            tlog::info() << "Loaded snapshot " << snapshot_path.str() << " succeed!";
+
         } else {
             // Otherwise, load the network config and prepare for training
             fs::path network_config_path = fs::path{"configs"} / mode_str;
@@ -218,6 +219,8 @@ int main(int argc, char **argv) {
             } else {
                 network_config_path = network_config_path / "base.json";
             }
+
+            tlog::info() << "Network config path: " << network_config_path;
 
             if (!network_config_path.exists()) {
                 tlog::error() << "Network config path " << network_config_path << " does not exist.";
@@ -235,6 +238,13 @@ int main(int argc, char **argv) {
                     total_training_steps = testbed.first_frame_max_training_step;
                 }
             }
+
+            tlog::info() << "Traing info:";
+            tlog::info() << "   testbed.first_frame_max_training_step: " << testbed.first_frame_max_training_step;
+            tlog::info() << "   testbed.all_training_time_frame: " << testbed.all_training_time_frame;
+            tlog::info() << "   testbed.next_frame_max_training_step:" << testbed.next_frame_max_training_step;
+            tlog::info() << "   total_training_steps: " << total_training_steps;
+
         }
 
         bool gui = !no_gui_flag;
@@ -249,14 +259,7 @@ int main(int argc, char **argv) {
         // Render/training loop
         while (testbed.frame()) {
             if (!gui) {
-                if (testbed.m_training_step % 1000 == 0) {
-                    if (total_training_steps > 0) {
-                        tlog::info() << "iteration=" << testbed.m_training_step << "/" << total_training_steps << " loss=" << testbed.m_loss_scalar.val();
-                    } else {
-                        tlog::info() << "iteration=" << testbed.m_training_step << " loss=" << testbed.m_loss_scalar.val();
-                    }
-                }
-                // tlog::info() << "iteration=" << testbed.m_training_step << " loss=" << testbed.m_loss_scalar.val() << " lr=" << testbed.m_optimizer.learning_rate();
+                tlog::info() << "iteration=" << testbed.m_training_step << " loss=" << testbed.m_loss_scalar.val();
             }
         }
     } catch (const exception &e) {

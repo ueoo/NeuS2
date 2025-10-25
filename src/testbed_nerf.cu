@@ -2988,15 +2988,18 @@ void Testbed::load_nerf() {
         });
         // printf all_json_path
         for (const auto &path : all_json_paths) {
-            printf("founded json file: %s\n", path.str().c_str());
+            // printf("founded json file: %s\n", path.str().c_str());
+            tlog::info() << "Founded json file: " << path.str();
         }
 
         all_training_time_frame = all_json_paths.size();
-        printf("total frame: %d\n", all_training_time_frame);
+        // printf("total frame: %d\n", all_training_time_frame);
+        tlog::info() << "Total frame: " << all_training_time_frame;
 
         std::vector<fs::path> tmp_json_paths;
         tmp_json_paths.emplace_back(all_json_paths[0]);
-        printf("tmp_json_paths size: %d\n", (int)tmp_json_paths.size());
+        // printf("tmp_json_paths size: %d\n", (int)tmp_json_paths.size());
+        tlog::info() << "Tmp json paths size: " << tmp_json_paths.size();
 
         m_nerf.training.dataset = ngp::load_nerf(tmp_json_paths, m_nerf.sharpen);
     }

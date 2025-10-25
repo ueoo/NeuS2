@@ -234,7 +234,21 @@ endif()
 ##########
 find_package(Python 3.7 COMPONENTS Interpreter Development)
 if (Python_FOUND)
-	add_subdirectory("dependencies/pybind11")
+    # Prefer system-installed pybind11 (2.11+ supports Python 3.12); fallback to vendored copy
+    execute_process(
+        COMMAND "${Python_EXECUTABLE}" -m pybind11 --cmakedir
+        OUTPUT_VARIABLE PYBIND11_CMAKE_DIR
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET)
+    if (PYBIND11_CMAKE_DIR)
+        list(APPEND CMAKE_PREFIX_PATH "${PYBIND11_CMAKE_DIR}")
+    endif()
+    find_package(pybind11 2.11 CONFIG QUIET)
+    if (pybind11_FOUND)
+        message(STATUS "Using system pybind11: ${pybind11_VERSION}")
+    else()
+        add_subdirectory("dependencies/pybind11")
+    endif()
 endif()
 
 ##############

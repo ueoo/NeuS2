@@ -82,10 +82,10 @@ static bool ends_with(const std::string &str, const std::string &ending) {
 void Testbed::load_training_data(const std::string &data_path) {
     m_data_path = data_path;
     // dynamic scene init log and vis
-    m_output_path = data_path + "/output";
+    m_output_path = "output";
 
     if (!m_output_path.exists()) {
-        printf("create_directory:%s\n", m_output_path.str().c_str());
+        tlog::info() << "Creating output directory: " << m_output_path.str();
         fs::create_directory(m_output_path);
     }
 
@@ -96,34 +96,40 @@ void Testbed::load_training_data(const std::string &data_path) {
     log_fp = fopen((m_output_path.str() + "/log.txt").c_str(), "wb");
 
     if (!m_mesh_path.exists()) {
-        printf("create_directory: %s\n", m_mesh_path.str().c_str());
+        tlog::info() << "Creating mesh directory: " << m_mesh_path.str();
         fs::create_directory(m_mesh_path);
     }
 
     if (!m_img_path.exists()) {
-        printf("create_directory: %s\n", m_img_path.str().c_str());
+        tlog::info() << "Creating images directory: " << m_img_path.str();
         fs::create_directory(m_img_path);
     }
 
     if (!m_data_path.exists()) {
-        throw std::runtime_error{std::string{"Data path '"} + m_data_path.str() + "' does not exist."};
+        tlog::error() << "Data path " << m_data_path.str() << " does not exist.";
+        return;
     }
 
     switch (m_testbed_mode) {
     case ETestbedMode::Nerf:
         load_nerf();
+        tlog::info() << "Loaded NeRF data from " << m_data_path.str();
         break;
     case ETestbedMode::Sdf:
         load_mesh();
+        tlog::info() << "Loaded SDF data from " << m_data_path.str();
         break;
     case ETestbedMode::Image:
         load_image();
+        tlog::info() << "Loaded image data from " << m_data_path.str();
         break;
     case ETestbedMode::Volume:
         load_volume();
+        tlog::info() << "Loaded volume data from " << m_data_path.str();
         break;
     default:
-        throw std::runtime_error{"Invalid testbed mode."};
+        tlog::error() << "Invalid testbed mode.";
+        return;
     }
 
     m_training_data_available = true;
@@ -302,12 +308,14 @@ std::string get_filename_in_data_path_with_suffix(fs::path data_path, fs::path n
 }
 
 void Testbed::compute_and_save_marching_cubes_mesh(const char *filename, Vector3i res3d, BoundingBox aabb, float thresh, bool unwrap_it) {
+    tlog::info() << "Computing and saving marching cubes mesh to " << filename;
     if (aabb.is_empty()) {
         aabb = (m_testbed_mode == ETestbedMode::Nerf) ? m_render_aabb : m_aabb;
     }
-    printf("unwrap_it:%d\n", unwrap_it);
+    tlog::info() << "Marching cubes AABB: " << aabb.min().transpose() << " to " << aabb.max().transpose();
     marching_cubes(res3d, aabb, thresh);
     if ((m_testbed_mode == ETestbedMode::Nerf)) {
+        tlog::info() << "Saving NeRF marching cubes mesh.";
         save_mesh(m_mesh.verts, m_mesh.vert_normals, m_mesh.vert_colors, m_mesh.indices, filename, unwrap_it, m_nerf.training.dataset.scale, m_nerf.training.dataset.offset, m_nerf.training.dataset.from_na);
     }
 }
@@ -871,6 +879,7 @@ void Testbed::imgui() {
             ImGui::SameLine();
 
             if (imgui_colored_button("Save density PNG", -0.4f)) {
+                tlog::info() << "Saving density PNG to " << m_data_path.str().c_str();
                 Testbed::compute_and_save_png_slices(m_data_path.str().c_str(), m_mesh.res, {}, m_mesh.thresh, density_range, flip_y_and_z_axes);
             }
 
@@ -897,7 +906,8 @@ void Testbed::imgui() {
 
             ImGui::Text("%dx%dx%d", res3d.x(), res3d.y(), res3d.z());
             if (obj_filename_buf[0] == '\0') {
-                snprintf(obj_filename_buf, sizeof(obj_filename_buf), "%s", get_filename_in_data_path_with_suffix(m_data_path, m_network_config_path, ".obj").c_str());
+                // Default mesh output path to the dedicated mesh directory
+                snprintf(obj_filename_buf, sizeof(obj_filename_buf), "%s", get_filename_in_data_path_with_suffix(m_mesh_path, m_network_config_path, ".obj").c_str());
             }
             float thresh_range = (m_testbed_mode == ETestbedMode::Sdf) ? 0.5f : 10.f;
             ImGui::SliderFloat("MC density threshold", &m_mesh.thresh, -thresh_range, thresh_range);
@@ -2126,7 +2136,7 @@ void Testbed::reset_network() {
     m_mask_loss_weight = hyperparams_config.value("mask_loss_weight", 0.f);
     m_ek_loss_weight = hyperparams_config.value("ek_loss_weight", 0.01f);
 
-    printf("m_predict_global_movement_training_step: %d\n", m_predict_global_movement_training_step);
+    tlog::info() << "m_predict_global_movement_training_step: " << m_predict_global_movement_training_step;
     auto dims = network_dims();
 
     if (m_testbed_mode == ETestbedMode::Nerf) {
@@ -2180,14 +2190,13 @@ void Testbed::reset_network() {
 
         tlog::info()
             << "GridEncoding: "
-            << " Nmin=" << m_base_grid_resolution
-            << " b=" << m_per_level_scale
-            << " F=" << n_features_per_level
-            << " T=2^" << log2_hashmap_size
-            << " L=" << m_num_levels;
+            << " Nmin(m_base_grid_resolution)=" << m_base_grid_resolution
+            << " b(m_per_level_scale)=" << m_per_level_scale
+            << " F(n_features_per_level)=" << n_features_per_level
+            << " T(log2_hashmap_size)=2^" << log2_hashmap_size
+            << " L(m_num_levels)=" << m_num_levels;
     }
-    // printf("loss_config:%s\n",loss_config["otype"].c_str());
-    // printf("1\n");
+    tlog::info() << "Loss type: " << loss_config["otype"];
     m_loss.reset(create_loss<precision_t>(loss_config));
     m_optimizer.reset(create_optimizer<precision_t>(optimizer_config));
 
@@ -3153,6 +3162,7 @@ void Testbed::save_snapshot(const std::string &filepath_string, bool include_opt
 
     m_network_config_path = filepath;
     std::ofstream f(m_network_config_path.str(), std::ios::out | std::ios::binary);
+    tlog::info() << "Saving snapshot to " << m_network_config_path;
     json::to_msgpack(m_network_config, f);
 }
 

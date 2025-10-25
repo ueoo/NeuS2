@@ -828,7 +828,7 @@ void marching_cubes_gpu(cudaStream_t stream, BoundingBox aabb, Vector3i res_3d, 
     std::vector<uint32_t> cpucounters;
     cpucounters.resize(4);
     counters.copy_to_host(cpucounters);
-    tlog::info() << "#vertices=" << cpucounters[0] << " #triangles=" << (cpucounters[1] / 3);
+	tlog::info() << "Marching Cubes: #vertices=" << cpucounters[0] << " #triangles=" << (cpucounters[1]/3);
 
     uint32_t n_verts = (cpucounters[0] + 127) & ~127; // round for later nn stuff
     verts_out.resize(n_verts);
